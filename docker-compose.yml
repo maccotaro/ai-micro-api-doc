@@ -1,0 +1,70 @@
+services:
+  doc-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-micro-api-doc
+    ports:
+      - "8011:8011"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-password}@host.docker.internal:5432/docdb
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-cfb4602f86707acf2a264bac18456bdafb4c9acd11e6cc1d89f606d1e2dc679f}@host.docker.internal:6379/1
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-cfb4602f86707acf2a264bac18456bdafb4c9acd11e6cc1d89f606d1e2dc679f}@host.docker.internal:6379/1
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-cfb4602f86707acf2a264bac18456bdafb4c9acd11e6cc1d89f606d1e2dc679f}@host.docker.internal:6379/2
+      - JWKS_URL=http://host.docker.internal:8002/.well-known/jwks.json
+      - JWT_AUDIENCE=fastapi-api
+      - JWT_ISSUER=https://auth.example.com
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - ADMIN_SERVICE_URL=http://host.docker.internal:8003
+      - STORAGE_BASE_PATH=/tmp/document_processing
+      - DOCLING_DEVICE=cuda
+      - OCR_GPU_ENABLED=true
+      - LOG_LEVEL=DEBUG
+      - DEBUG=true
+      - VERSION=0.1.0
+      # Embedding
+      - EMBEDDING_MODEL=bge-m3:567m
+      - EMBEDDING_DIMENSION=768
+      # Docling/EasyOCR cache directories
+      - DOCLING_CACHE_DIR=/tmp/.docling_cache
+      - HF_HOME=/tmp/.docling_cache/huggingface
+      - TRANSFORMERS_CACHE=/tmp/.docling_cache/transformers
+      - EASYOCR_MODULE_PATH=/tmp/.easyocr_models
+      - EASYOCR_MODEL_STORAGE_DIRECTORY=/tmp/.easyocr_models
+      - TORCH_HOME=/tmp/.docling_cache/torch
+      - XDG_CACHE_HOME=/tmp/.easyocr_models
+      # GPU settings
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_HOME=/usr/local/cuda
+      - LD_LIBRARY_PATH=/usr/lib/wsl/lib:/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
+    volumes:
+      - document_processing:/tmp/document_processing
+      - ./app:/app/app  # ホットリロード用
+      - ./models/easyocr:/tmp/.easyocr_models
+      - ./models/docling:/tmp/.docling_cache
+      - /usr/lib/wsl:/usr/lib/wsl:ro  # WSL2 GPU drivers
+      - ../ai-micro-api-auth/keys/public.pem:/app/keys/public.pem:ro  # JWT public key
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  document_processing:
+    external: true
+    name: ai-micro-celery_document_processing

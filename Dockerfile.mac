@@ -1,0 +1,91 @@
+FROM python:3.11-slim
+
+# ARM64最適化のための環境変数
+ENV PYTHONUNBUFFERED=1
+ENV TORCH_COMPILE=0
+ENV MKL_NUM_THREADS=2
+ENV OMP_NUM_THREADS=2
+ENV OPENBLAS_NUM_THREADS=2
+
+# Set environment variables
+# ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Set work directory
+WORKDIR /app
+
+# Install system dependencies for document processing
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        curl \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-jpn \
+        libtesseract-dev \
+        libgl1-mesa-dev \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+        libgomp1 \
+        libgcc-s1 \
+        poppler-utils \
+        libpoppler-cpp-dev \
+        qpdf \
+        ghostscript \
+        fonts-noto-cjk \
+        fonts-ipafont \
+        fonts-ipaexfont \
+        fonts-takao \
+        fonts-vlgothic \
+        libmecab-dev \
+        mecab \
+        mecab-ipadic-utf8 \
+    && fc-cache -fv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tesseractの設定最適化（データファイルはホスト側からマウントされる）
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+RUN mkdir -p /usr/share/tesseract-ocr/5/tessdata
+
+# MeCabの設定（mecabrcへのシンボリックリンク作成）
+RUN mkdir -p /usr/local/etc \
+    && ln -s /etc/mecabrc /usr/local/etc/mecabrc
+
+# Install Python dependencies
+COPY pyproject.toml ./
+RUN pip install poetry \
+    && poetry config virtualenvs.create false \
+    && poetry install --no-root
+
+# Copy project
+COPY . .
+
+# Create non-root user and model cache directories
+RUN adduser --disabled-password --gecos '' --uid 1000 appuser \
+    && chown -R appuser:appuser /app \
+    && mkdir -p /tmp/.docling_cache/huggingface \
+    && mkdir -p /tmp/.docling_cache/transformers \
+    && mkdir -p /tmp/.docling_cache/torch \
+    && mkdir -p /tmp/.easyocr_models \
+    && mkdir -p /tmp/document_processing \
+    && chown -R appuser:appuser /tmp/.docling_cache /tmp/.easyocr_models /tmp/document_processing \
+    && mkdir -p /usr/local/lib/python3.11/site-packages/deepsearch_glm/resources/models/crf/part-of-speech \
+    && chown -R appuser:appuser /usr/local/lib/python3.11/site-packages/deepsearch_glm || true
+USER appuser
+
+# メモリ制限とワーカー数の設定
+ENV UVICORN_WORKERS=1
+ENV UVICORN_WORKER_CONNECTIONS=10
+
+# Expose port
+EXPOSE 8003
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8003/healthz')"
+
+# Run the application
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
