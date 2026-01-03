@@ -1,4 +1,8 @@
-"""Document processing Celery tasks."""
+"""Lightweight Celery tasks for api-doc service.
+
+Note: Heavy document processing tasks are handled by celery-doc worker.
+This module only contains lightweight tasks that can run in api-doc.
+"""
 import logging
 from pathlib import Path
 from typing import Optional
@@ -10,99 +14,9 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, max_retries=3)
-def process_document_task(
-    self,
-    file_path: str,
-    original_filename: str,
-    callback_url: Optional[str] = None,
-    user_id: Optional[str] = None,
-):
-    """
-    Process a document asynchronously.
-
-    This task:
-    1. Runs Docling-based layout extraction
-    2. Generates hierarchical structure metadata
-    3. Optionally sends callback to notify completion
-
-    Args:
-        file_path: Path to the document file
-        original_filename: Original filename
-        callback_url: Optional URL to notify on completion
-        user_id: ID of the user who initiated the task
-
-    Returns:
-        dict: Processing result with output paths and metadata
-    """
-    try:
-        logger.info(f"Starting document processing: {original_filename}")
-
-        from app.services.processor import get_document_processor
-
-        # Get processor
-        processor = get_document_processor(use_layout_extractor=True)
-
-        # Process document
-        file_path_obj = Path(file_path)
-        result = processor.process_document(
-            file_path_obj, original_filename=original_filename
-        )
-
-        logger.info(f"Document processing completed: {original_filename}")
-
-        # Send callback if configured
-        if callback_url:
-            try:
-                with httpx.Client(timeout=30.0) as client:
-                    client.post(
-                        callback_url,
-                        json={
-                            "status": "success",
-                            "task_id": self.request.id,
-                            "result": result,
-                        },
-                    )
-            except Exception as cb_error:
-                logger.error(f"Callback failed: {cb_error}")
-
-        return {
-            "status": "success",
-            "message": "Document processed successfully",
-            "output_directory": result.get("output_directory", ""),
-            "files_created": result.get("files_created", {}),
-            "total_pages": result.get("total_pages", 0),
-            "original_filename": original_filename,
-            "processing_mode": result.get("processing_mode", "docling"),
-        }
-
-    except Exception as e:
-        logger.error(f"Document processing failed: {e}")
-
-        # Retry if transient error
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
-
-        # Send failure callback
-        if callback_url:
-            try:
-                with httpx.Client(timeout=30.0) as client:
-                    client.post(
-                        callback_url,
-                        json={
-                            "status": "error",
-                            "task_id": self.request.id,
-                            "error": str(e),
-                        },
-                    )
-            except Exception as cb_error:
-                logger.error(f"Callback failed: {cb_error}")
-
-        return {
-            "status": "error",
-            "message": str(e),
-            "original_filename": original_filename,
-        }
+# Note: process_document_task is now handled by celery-doc worker
+# Use celery_app.send_task("app.tasks.document_tasks.process_document_task", ...)
+# to queue tasks for celery-doc
 
 
 @celery_app.task(bind=True, max_retries=3)

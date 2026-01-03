@@ -4,13 +4,14 @@ from typing import Dict, Any, Optional, List
 
 class DocumentProcessResponse(BaseModel):
     """Response model for document processing."""
-    status: str = Field(..., description="Processing status (success, error)")
+    status: str = Field(..., description="Processing status (success, processing, error)")
     message: str = Field(..., description="Processing message")
-    output_directory: str = Field(..., description="Relative path to output directory")
-    files_created: Dict[str, str] = Field(..., description="Created file paths")
-    total_pages: int = Field(..., description="Total number of pages processed")
+    output_directory: str = Field("", description="Relative path to output directory")
+    files_created: Dict[str, str] = Field(default_factory=dict, description="Created file paths")
+    total_pages: int = Field(0, description="Total number of pages processed")
     original_filename: str = Field(..., description="Original uploaded filename")
-    processing_mode: str = Field(..., description="Processing mode used (docling or fallback)")
+    processing_mode: str = Field(..., description="Processing mode used (celery_async, docling)")
+    task_id: Optional[str] = Field(None, description="Celery task ID for async tracking")
 
 
 class DocumentProcessStatus(BaseModel):

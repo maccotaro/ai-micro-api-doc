@@ -1,11 +1,12 @@
-"""Document processing router - OCR、レイアウト解析、階層構造変換."""
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks
+"""Document processing router - OCR、レイアウト解析、階層構造変換.
+
+すべての重い処理はcelery-docに委譲し、api-docはAPIゲートウェイとして機能します。
+"""
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 import logging
-import tempfile
-import shutil
 import asyncio
 import json
 from typing import Optional
@@ -15,7 +16,6 @@ from app.core.security import get_current_user, require_admin
 from app.schemas.documents import (
     DocumentProcessResponse,
     DocumentProcessStatus,
-    ProcessingError,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,89 +25,131 @@ router = APIRouter()
 
 @router.get("/status", response_model=DocumentProcessStatus)
 async def get_processing_status(_: dict = Depends(require_admin)):
-    """Get document processing service status."""
+    """Get document processing service status.
+
+    Celeryワーカー(celery-doc)の状態を確認します。
+    """
     try:
-        from app.services.processor import get_document_processor
+        from app.tasks.celery_app import celery_app
 
-        processor = get_document_processor(use_layout_extractor=True)
+        # Celeryワーカーの状態を確認
+        inspect = celery_app.control.inspect()
+        active_workers = inspect.active()
 
-        # docling_processorの存在を確認
-        if processor.docling_processor is None:
+        if active_workers:
+            worker_names = list(active_workers.keys())
             return DocumentProcessStatus(
-                status="error",
-                message="Docling processor not available",
-                mode="fallback_only",
+                status="ready",
+                message=f"Document processing service is ready. Workers: {len(worker_names)}",
+                mode="celery_async",
+                output_directory=None,
+                cache_directories=None,
+            )
+        else:
+            return DocumentProcessStatus(
+                status="warning",
+                message="No active Celery workers found. Processing may be delayed.",
+                mode="celery_async",
                 output_directory=None,
                 cache_directories=None,
             )
 
-        return DocumentProcessStatus(
-            status="ready",
-            message="Document processing service is ready",
-            mode="docling_with_fallback",
-            output_directory=str(processor.output_base_dir),
-            cache_directories={
-                "easyocr": str(processor.easyocr_cache_dir),
-                "docling": str(processor.docling_cache_dir),
-            },
-        )
-
     except Exception as e:
         logger.error(f"Error checking processing status: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to check status: {str(e)}"
+        return DocumentProcessStatus(
+            status="error",
+            message=f"Failed to check status: {str(e)}",
+            mode="celery_async",
+            output_directory=None,
+            cache_directories=None,
         )
 
 
 @router.post("/process", response_model=DocumentProcessResponse)
 async def process_document(
     file: UploadFile = File(...),
+    wait: bool = True,
+    timeout: int = 300,
     current_user: dict = Depends(require_admin),
 ):
     """
     Process an uploaded document file.
 
     This endpoint:
-    1. Saves the uploaded file to a temporary location
-    2. Runs Docling-based layout extraction
-    3. Generates hierarchical structure metadata
-    4. Returns processing results
+    1. Saves the uploaded file to persistent storage
+    2. Queues a Celery task for processing (celery-doc)
+    3. Optionally waits for completion (default: wait=True)
 
-    For async processing, use /process/async endpoint.
+    Args:
+        file: Document file to process
+        wait: If True, wait for processing to complete (default: True)
+        timeout: Max seconds to wait (default: 300)
+
+    For fully async processing, use /process/async endpoint or set wait=False.
     """
     try:
-        from app.services.processor import get_document_processor
+        from app.core.config import settings
+        from app.tasks.celery_app import celery_app
 
-        # Create temp file
-        suffix = Path(file.filename).suffix if file.filename else ".pdf"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = Path(tmp.name)
+        # Save file to persistent storage
+        task_id = str(uuid4())
+        storage_path = Path(settings.STORAGE_BASE_PATH) / "pending" / task_id
+        storage_path.mkdir(parents=True, exist_ok=True)
 
-        try:
-            # Get processor
-            processor = get_document_processor(use_layout_extractor=True)
+        file_path = storage_path / (file.filename or "document.pdf")
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
 
-            # Process document
-            result = processor.process_document(
-                tmp_path, original_filename=file.filename
+        # Queue Celery task to celery-doc worker
+        result = celery_app.send_task(
+            "app.tasks.document_tasks.process_document_task",
+            args=[
+                str(file_path),
+                file.filename,
+                None,  # callback_url
+                current_user.get("sub"),
+            ],
+        )
+
+        if not wait:
+            # Return immediately with task_id
+            return DocumentProcessResponse(
+                status="processing",
+                message="Document processing started",
+                output_directory="",
+                files_created={},
+                total_pages=0,
+                original_filename=file.filename or "unknown",
+                processing_mode="celery_async",
+                task_id=result.id,
             )
+
+        # Wait for completion
+        try:
+            task_result = result.get(timeout=timeout)
 
             return DocumentProcessResponse(
                 status="success",
                 message="Document processed successfully",
-                output_directory=result.get("output_directory", ""),
-                files_created=result.get("files_created", {}),
-                total_pages=result.get("total_pages", 0),
+                output_directory=task_result.get("output_directory", ""),
+                files_created=task_result.get("files_created", {}),
+                total_pages=task_result.get("total_pages", 0),
                 original_filename=file.filename or "unknown",
-                processing_mode=result.get("processing_mode", "docling"),
+                processing_mode="celery_async",
             )
-
-        finally:
-            # Cleanup temp file
-            if tmp_path.exists():
-                tmp_path.unlink()
+        except Exception as wait_error:
+            logger.warning(f"Task wait timeout or error: {wait_error}")
+            return DocumentProcessResponse(
+                status="processing",
+                message=f"Processing in progress. Use task_id to check status: {result.id}",
+                output_directory="",
+                files_created={},
+                total_pages=0,
+                original_filename=file.filename or "unknown",
+                processing_mode="celery_async",
+                task_id=result.id,
+            )
 
     except Exception as e:
         logger.error(f"Error processing document: {e}")
@@ -134,7 +176,7 @@ async def process_document_async(
     """
     try:
         from app.core.config import settings
-        from app.tasks.document_tasks import process_document_task
+        from app.tasks.celery_app import celery_app
 
         # Save file to persistent storage
         task_id = str(uuid4())
@@ -146,12 +188,15 @@ async def process_document_async(
         with open(file_path, "wb") as f:
             f.write(content)
 
-        # Queue Celery task
-        result = process_document_task.delay(
-            str(file_path),
-            file.filename,
-            callback_url,
-            current_user.get("sub"),
+        # Queue Celery task to celery-doc worker
+        result = celery_app.send_task(
+            "app.tasks.document_tasks.process_document_task",
+            args=[
+                str(file_path),
+                file.filename,
+                callback_url,
+                current_user.get("sub"),
+            ],
         )
 
         return {
@@ -174,7 +219,7 @@ async def get_task_status(
     """Get the status of an async processing task."""
     try:
         from celery.result import AsyncResult
-        from app.tasks import celery_app
+        from app.tasks.celery_app import celery_app
 
         result = AsyncResult(task_id, app=celery_app)
 
