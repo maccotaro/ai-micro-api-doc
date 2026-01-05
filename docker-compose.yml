@@ -19,6 +19,11 @@ services:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - ADMIN_SERVICE_URL=http://host.docker.internal:8003
       - STORAGE_BASE_PATH=/tmp/document_processing
+      # MinIO/S3 settings
+      - S3_ENDPOINT=http://host.docker.internal:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=documents
       - DOCLING_DEVICE=cuda
       - OCR_GPU_ENABLED=true
       - LOG_LEVEL=DEBUG

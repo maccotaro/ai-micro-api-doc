@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from uuid import UUID
 import logging
+import tempfile
 from typing import Dict, Any, Optional
 
 from app.core.security import get_current_user, require_admin
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Cache for MinIO downloaded files to avoid re-downloading
+_minio_cache: Dict[str, Path] = {}
+
 
 def resolve_document_path(
     document_id: str,
@@ -38,11 +42,17 @@ def resolve_document_path(
         Path: Resolved document directory path
 
     The path resolution strategy:
-    1. If processing_path is provided, use it directly
-    2. Otherwise, fall back to {STORAGE_BASE_PATH}/{document_id}
+    1. If processing_path starts with minio://, download files from MinIO
+    2. If processing_path is an absolute local path, use it directly
+    3. If processing_path is relative, resolve against STORAGE_BASE_PATH
+    4. Otherwise, fall back to {STORAGE_BASE_PATH}/{document_id}
     """
     if processing_path:
-        # Use provided processing path
+        # Handle MinIO path
+        if processing_path.startswith("minio://"):
+            return _resolve_minio_path(document_id, processing_path)
+
+        # Use provided local processing path
         path = Path(processing_path)
         if path.is_absolute():
             return path
@@ -51,6 +61,67 @@ def resolve_document_path(
 
     # Fallback to document_id-based path
     return Path(settings.STORAGE_BASE_PATH) / document_id
+
+
+def _resolve_minio_path(document_id: str, minio_path: str) -> Path:
+    """
+    Download files from MinIO and return local cache path.
+
+    Args:
+        document_id: Document UUID for cache key
+        minio_path: MinIO path (minio://bucket/prefix)
+
+    Returns:
+        Path: Local directory containing downloaded files
+    """
+    global _minio_cache
+
+    # Check cache first
+    cache_key = f"{document_id}:{minio_path}"
+    if cache_key in _minio_cache:
+        cached_path = _minio_cache[cache_key]
+        if cached_path.exists():
+            logger.debug(f"Using cached MinIO download: {cached_path}")
+            return cached_path
+
+    try:
+        from app.services.storage import get_minio_client, parse_minio_path
+
+        logger.info(f"Downloading from MinIO: {minio_path}")
+        bucket, prefix = parse_minio_path(minio_path)
+        minio_client = get_minio_client()
+
+        # Create temp directory for this document
+        temp_dir = Path(tempfile.mkdtemp(prefix=f"api_doc_{document_id[:8]}_"))
+
+        # List and download all files with this prefix
+        objects = minio_client.list_objects(bucket, prefix)
+        downloaded_count = 0
+
+        for obj in objects:
+            object_key = obj["Key"]
+            # Get relative path from prefix
+            relative_path = object_key[len(prefix):].lstrip("/")
+            if not relative_path:
+                continue
+
+            local_file_path = temp_dir / relative_path
+            local_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            minio_client.download_file(bucket, object_key, str(local_file_path))
+            downloaded_count += 1
+
+        logger.info(f"Downloaded {downloaded_count} files from MinIO to {temp_dir}")
+
+        # Cache the result
+        _minio_cache[cache_key] = temp_dir
+
+        return temp_dir
+
+    except Exception as e:
+        logger.error(f"Failed to download from MinIO: {e}")
+        # Fall back to local storage path
+        return Path(settings.STORAGE_BASE_PATH) / document_id
 
 
 @router.post("/crop", response_model=CropImageResponse)
@@ -124,11 +195,39 @@ async def crop_image(
                 detail=f"Image cropping failed: {result.get('error', 'Unknown error')}"
             )
 
+        # If using MinIO storage, upload the cropped image
+        if processing_path and processing_path.startswith("minio://"):
+            try:
+                from app.services.storage import get_minio_client, parse_minio_path
+
+                bucket, prefix = parse_minio_path(processing_path)
+                minio_client = get_minio_client()
+
+                # Upload cropped image to MinIO
+                local_cropped_path = doc_path / result["image_path"]
+                object_key = f"{prefix}/{result['image_path']}"
+
+                minio_client.upload_file(
+                    str(local_cropped_path),
+                    bucket,
+                    object_key,
+                )
+                logger.info(f"Uploaded cropped image to MinIO: {bucket}/{object_key}")
+            except Exception as e:
+                logger.error(f"Failed to upload cropped image to MinIO: {e}")
+                # Continue anyway - image is available locally
+
+        # Build download URL with processing_path if using MinIO
+        from urllib.parse import urlencode
+        base_url = f"/api/doc/ocr/images/{document_id}/{result['image_path']}"
+        if processing_path:
+            base_url = f"{base_url}?{urlencode({'processing_path': processing_path})}"
+
         return CropImageResponse(
             success=True,
             image_path=result["image_path"],
             full_path=result["full_path"],
-            download_url=f"/api/doc/ocr/images/{document_id}/{result['image_path']}",
+            download_url=base_url,
             width=result["width"],
             height=result["height"],
             file_size=result["file_size"],
