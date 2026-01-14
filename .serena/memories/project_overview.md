@@ -19,6 +19,7 @@
 | 日本語処理 | MeCab |
 | Embedding | LangChain + BGE-M3 |
 | GPU | NVIDIA CUDA / Apple MPS |
+| ポート | 8011 |
 
 ## ディレクトリ構造
 
@@ -57,11 +58,6 @@ ai-micro-api-doc/
 └── CLAUDE.md                        # ドキュメント
 ```
 
-## ポート
-
-- 開発: 8011
-- コンテナ: 8011
-
 ## 主要API
 
 | エンドポイント | 説明 |
@@ -79,3 +75,5 @@ ai-micro-api-doc/
 - **ai-micro-celery-doc**: Celeryワーカー（ドキュメント処理）
 - **ai-micro-postgres**: PostgreSQL (docdb)
 - **ai-micro-redis**: Redis (キャッシュ/タスクキュー)
+
+## 最終更新: 2026-01-14
