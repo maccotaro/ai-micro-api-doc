@@ -46,9 +46,8 @@ RUN apt-get update \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 
-# Tesseractの設定最適化（データファイルはホスト側からマウントされる）
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
-RUN mkdir -p /usr/share/tesseract-ocr/5/tessdata
+# Tesseractの設定 (Ubuntu/Debian派生では Tesseract 4.x がインストールされる)
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
 
 # MeCabの設定（mecabrcへのシンボリックリンク作成）
 RUN mkdir -p /usr/local/etc \

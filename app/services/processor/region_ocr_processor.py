@@ -42,14 +42,19 @@ class RegionOCRProcessor:
         
         # Initialize EasyOCR if available
         if EASYOCR_AVAILABLE:
-            try:
-                # Initialize with Japanese and English, auto-detect GPU
-                use_gpu = GPU_AVAILABLE
-                self.easyocr_reader = easyocr.Reader(['ja', 'en'], gpu=use_gpu)
-                logger.info(f"EasyOCR reader initialized successfully (GPU: {use_gpu})")
-            except Exception as e:
-                logger.error(f"Failed to initialize EasyOCR: {e}")
-                self.easyocr_reader = None
+            # Try GPU first, then fallback to CPU if GPU fails
+            for use_gpu in ([True, False] if GPU_AVAILABLE else [False]):
+                try:
+                    logger.info(f"Attempting to initialize EasyOCR with GPU={use_gpu}")
+                    self.easyocr_reader = easyocr.Reader(['ja', 'en'], gpu=use_gpu)
+                    logger.info(f"EasyOCR reader initialized successfully (GPU: {use_gpu})")
+                    break  # Success, exit loop
+                except Exception as e:
+                    logger.warning(f"Failed to initialize EasyOCR with GPU={use_gpu}: {e}")
+                    self.easyocr_reader = None
+                    if not use_gpu:
+                        logger.error("EasyOCR initialization failed in both GPU and CPU modes")
+                        break
     
     def _check_tesseract(self) -> bool:
         """Tesseractの利用可能性をチェック"""
