@@ -31,9 +31,9 @@ services:
       - LOG_LEVEL=DEBUG
       - DEBUG=true
       - VERSION=0.1.0
-      # Embedding
-      - EMBEDDING_MODEL=bge-m3:567m
-      - EMBEDDING_DIMENSION=768
+      # Model settings via api-admin internal API
+      - ADMIN_INTERNAL_URL=http://host.docker.internal:8003
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-change-me-in-production}
       # EasyOCR cache directories
       - EASYOCR_MODULE_PATH=/tmp/.easyocr_models
       - EASYOCR_MODEL_STORAGE_DIRECTORY=/tmp/.easyocr_models

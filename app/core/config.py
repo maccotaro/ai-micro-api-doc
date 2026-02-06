@@ -33,10 +33,10 @@ class Settings(BaseSettings):
     OCR_DEFAULT_LANGUAGE: str = "jpn+eng"
     OCR_GPU_ENABLED: bool = True
 
-    # Embedding settings
-    EMBEDDING_MODEL: str = "bge-m3:567m"
-    EMBEDDING_DIMENSION: int = 768
+    # Embedding settings (model names are managed via DB system_settings, fetched via internal API)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    ADMIN_INTERNAL_URL: str = "http://localhost:8003"
+    INTERNAL_API_SECRET: str = "change-me-in-production"
 
     # Chunking settings
     CHUNK_SIZE: int = 1000
@@ -65,10 +65,6 @@ class Settings(BaseSettings):
     @property
     def ollama_base_url(self) -> str:
         return self.OLLAMA_BASE_URL
-
-    @property
-    def embedding_model(self) -> str:
-        return self.EMBEDDING_MODEL
 
     @property
     def chunk_size(self) -> int:
