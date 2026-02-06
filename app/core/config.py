@@ -12,13 +12,6 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     DEBUG: bool = False
 
-    # Database (docdb)
-    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/docdb"
-    DATABASE_POOL_SIZE: int = 10
-    DATABASE_MAX_OVERFLOW: int = 20
-    DATABASE_POOL_TIMEOUT: int = 30
-    DATABASE_POOL_RECYCLE: int = 3600
-
     # Redis (task queue)
     REDIS_URL: str = "redis://:password@localhost:6379/1"
 
@@ -34,10 +27,6 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET: str = "documents"
-
-    # Docling settings
-    DOCLING_DEVICE: str = "cuda"  # cuda, cpu, mps
-    DOCLING_BATCH_SIZE: int = 4
 
     # OCR settings
     OCR_DEFAULT_ENGINE: str = "easyocr"  # easyocr, tesseract
@@ -73,10 +62,6 @@ class Settings(BaseSettings):
         extra = "ignore"
 
     # Property accessors for lowercase compatibility
-    @property
-    def database_url(self) -> str:
-        return self.DATABASE_URL
-
     @property
     def ollama_base_url(self) -> str:
         return self.OLLAMA_BASE_URL

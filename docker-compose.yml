@@ -9,7 +9,6 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-password}@host.docker.internal:5432/docdb
       - REDIS_URL=redis://:${REDIS_PASSWORD:-cfb4602f86707acf2a264bac18456bdafb4c9acd11e6cc1d89f606d1e2dc679f}@host.docker.internal:6379/1
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-cfb4602f86707acf2a264bac18456bdafb4c9acd11e6cc1d89f606d1e2dc679f}@host.docker.internal:6379/1
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-cfb4602f86707acf2a264bac18456bdafb4c9acd11e6cc1d89f606d1e2dc679f}@host.docker.internal:6379/2
@@ -24,7 +23,6 @@ services:
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
       - S3_BUCKET=documents
-      - DOCLING_DEVICE=cuda
       - OCR_GPU_ENABLED=true
       - LOG_LEVEL=DEBUG
       - DEBUG=true
@@ -32,13 +30,9 @@ services:
       # Embedding
       - EMBEDDING_MODEL=bge-m3:567m
       - EMBEDDING_DIMENSION=768
-      # Docling/EasyOCR cache directories
-      - DOCLING_CACHE_DIR=/tmp/.docling_cache
-      - HF_HOME=/tmp/.docling_cache/huggingface
-      - TRANSFORMERS_CACHE=/tmp/.docling_cache/transformers
+      # EasyOCR cache directories
       - EASYOCR_MODULE_PATH=/tmp/.easyocr_models
       - EASYOCR_MODEL_STORAGE_DIRECTORY=/tmp/.easyocr_models
-      - TORCH_HOME=/tmp/.docling_cache/torch
       - XDG_CACHE_HOME=/tmp/.easyocr_models
       # GPU settings
       - NVIDIA_VISIBLE_DEVICES=all
@@ -48,8 +42,7 @@ services:
     volumes:
       - document_processing:/tmp/document_processing
       - ./app:/app/app  # ホットリロード用
-      - ./models/easyocr:/tmp/.easyocr_models
-      - ./models/docling:/tmp/.docling_cache
+      - ../models/easyocr:/tmp/.easyocr_models
       - /usr/lib/wsl:/usr/lib/wsl:ro  # WSL2 GPU drivers
       - ../ai-micro-api-auth/keys/public.pem:/app/keys/public.pem:ro  # JWT public key
     deploy:

@@ -50,7 +50,6 @@ ai-micro-api-doc/
 │   ├── main.py                      # FastAPIエントリーポイント
 │   ├── core/
 │   │   ├── config.py                # 設定
-│   │   ├── database.py              # DB接続
 │   │   └── security.py              # JWT認証
 │   ├── services/
 │   │   └── processor/               # 軽量処理モジュール
