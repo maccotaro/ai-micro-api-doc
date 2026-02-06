@@ -1,4 +1,4 @@
-"""Document Processing Service API - OCR、レイアウト解析、チャンク分割"""
+"""Document Processing Gateway API - 領域OCR、画像クロッピング"""
 import logging
 from contextlib import asynccontextmanager
 
@@ -20,7 +20,6 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info(f"Starting {settings.SERVICE_NAME} v{settings.VERSION}")
     logger.info(f"Debug mode: {settings.DEBUG}")
-    logger.info(f"Docling device: {settings.DOCLING_DEVICE}")
     logger.info(f"OCR engine: {settings.OCR_DEFAULT_ENGINE}")
     logger.info(f"GPU OCR: {'enabled' if settings.OCR_GPU_ENABLED else 'disabled'}")
     yield
@@ -30,7 +29,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI application
 app = FastAPI(
     title="Document Processing Service API",
-    description="ドキュメント処理サービス - OCR、レイアウト解析、階層構造変換、チャンク分割",
+    description="ドキュメント処理ゲートウェイ - 領域OCR、画像クロッピング",
     version=settings.VERSION,
     lifespan=lifespan,
     docs_url="/docs",

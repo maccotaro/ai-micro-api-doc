@@ -86,13 +86,10 @@ COPY app ./app
 # Create directories and non-root user
 RUN adduser --disabled-password --gecos '' --uid 1000 appuser \
     && chown -R appuser:appuser /app \
-    && mkdir -p /tmp/.docling_cache/huggingface \
-    && mkdir -p /tmp/.docling_cache/transformers \
-    && mkdir -p /tmp/.docling_cache/torch \
     && mkdir -p /tmp/.easyocr_models \
     && mkdir -p /tmp/document_processing \
     && mkdir -p /data/documents \
-    && chown -R appuser:appuser /tmp/.docling_cache /tmp/.easyocr_models /tmp/document_processing /data/documents
+    && chown -R appuser:appuser /tmp/.easyocr_models /tmp/document_processing /data/documents
 
 # Expose port
 EXPOSE 8011

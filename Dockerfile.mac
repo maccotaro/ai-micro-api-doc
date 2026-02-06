@@ -65,14 +65,9 @@ COPY . .
 # Create non-root user and model cache directories
 RUN adduser --disabled-password --gecos '' --uid 1000 appuser \
     && chown -R appuser:appuser /app \
-    && mkdir -p /tmp/.docling_cache/huggingface \
-    && mkdir -p /tmp/.docling_cache/transformers \
-    && mkdir -p /tmp/.docling_cache/torch \
     && mkdir -p /tmp/.easyocr_models \
     && mkdir -p /tmp/document_processing \
-    && chown -R appuser:appuser /tmp/.docling_cache /tmp/.easyocr_models /tmp/document_processing \
-    && mkdir -p /usr/local/lib/python3.11/site-packages/deepsearch_glm/resources/models/crf/part-of-speech \
-    && chown -R appuser:appuser /usr/local/lib/python3.11/site-packages/deepsearch_glm || true
+    && chown -R appuser:appuser /tmp/.easyocr_models /tmp/document_processing
 USER appuser
 
 # メモリ制限とワーカー数の設定
