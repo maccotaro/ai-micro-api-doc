@@ -58,6 +58,16 @@ async def health_check():
     }
 
 
+@app.get("/healthz", tags=["health"])
+async def healthz_check():
+    """Health check endpoint (standardized path)."""
+    return {
+        "status": "healthy",
+        "service": settings.SERVICE_NAME,
+        "version": settings.VERSION,
+    }
+
+
 @app.get("/", tags=["root"])
 async def root():
     """Root endpoint."""
