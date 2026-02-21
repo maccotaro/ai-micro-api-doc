@@ -1,6 +1,6 @@
-"""JWT authentication and authorization for RAG Engine."""
+"""JWT authentication and authorization for Document Processing Gateway."""
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 from functools import lru_cache
 
 import httpx
@@ -112,6 +112,7 @@ async def get_current_user(
     return {
         "user_id": payload.get("sub"),
         "roles": payload.get("roles", []),
+        "permissions": payload.get("permissions", []),
         "tenant_id": payload.get("tenant_id"),
         "department": payload.get("department"),
         "clearance_level": payload.get("clearance_level"),
@@ -138,3 +139,42 @@ def get_access_token(
     if credentials:
         return credentials.credentials
     return None
+
+
+def require_permission(resource: str, action: str):
+    """Resource x action permission check using JWT permissions array."""
+    def permission_checker(
+        current_user: Dict[str, Any] = Depends(get_current_user),
+    ) -> Dict[str, Any]:
+        required = f"{resource}:{action}"
+        user_permissions = current_user.get("permissions", [])
+
+        resource_wildcard = f"{resource}:*"
+        global_wildcard = "*:*"
+
+        if (
+            required in user_permissions
+            or resource_wildcard in user_permissions
+            or global_wildcard in user_permissions
+        ):
+            return current_user
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied: {required}",
+        )
+    return permission_checker
+
+
+def require_any_permission(permissions: List[Tuple[str, str]]):
+    """Allow access if user has ANY of the listed (resource, action) permissions."""
+    def checker(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+        user_perms = set(current_user.get("permissions", []))
+        required = {f"{r}:{a}" for r, a in permissions}
+        if user_perms & required or "*:*" in user_perms:
+            return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied",
+        )
+    return checker
