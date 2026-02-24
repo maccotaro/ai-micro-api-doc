@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     ADMIN_INTERNAL_URL: str = "http://localhost:8003"
     INTERNAL_API_SECRET: str = "change-me-in-production"
 
+    # Audit service
+    AUDIT_SERVICE_URL: str = "http://host.docker.internal:8014"
+
     # Chunking settings
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
