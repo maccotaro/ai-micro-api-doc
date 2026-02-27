@@ -86,10 +86,12 @@ async def root():
 # Import and register routers
 from app.routers.process import router as process_router
 from app.routers.ocr import router as ocr_router
+from app.routers.internal_process import router as internal_router
 
 # Register routers with API prefix
 app.include_router(process_router, prefix="/api/doc", tags=["process"])
 app.include_router(ocr_router, prefix="/api/doc/ocr", tags=["ocr"])
+app.include_router(internal_router)
 
 
 if __name__ == "__main__":
