@@ -348,7 +348,7 @@ async def internal_ocr_region(
         )
 
 
-@router.post("/crop", response_model=CropImageResponse)
+@router.post("/ocr/crop", response_model=CropImageResponse)
 async def internal_crop_image(
     document_id: str,
     page_number: int,
