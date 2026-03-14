@@ -24,3 +24,7 @@ format:
 # Run type checking
 type-check:
 	poetry run mypy app/
+
+# Security scan
+security-scan:
+	poetry run bandit -r app/ -ll -q
