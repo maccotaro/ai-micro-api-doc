@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     OCR_GPU_ENABLED: bool = True
 
     # Embedding settings (model names are managed via DB system_settings, fetched via internal API)
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    VLLM_EMBED_URL: str = "http://localhost:8001"
     ADMIN_INTERNAL_URL: str = "http://localhost:8003"
     INTERNAL_API_SECRET: str = "change-me-in-production"
 
@@ -66,8 +66,8 @@ class Settings(BaseSettings):
 
     # Property accessors for lowercase compatibility
     @property
-    def ollama_base_url(self) -> str:
-        return self.OLLAMA_BASE_URL
+    def vllm_embed_url(self) -> str:
+        return self.VLLM_EMBED_URL
 
     @property
     def chunk_size(self) -> int:

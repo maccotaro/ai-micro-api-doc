@@ -93,6 +93,11 @@ app.include_router(process_router, prefix="/api/doc", tags=["process"])
 app.include_router(ocr_router, prefix="/api/doc/ocr", tags=["ocr"])
 app.include_router(internal_router)
 
+# Register /internal/v1/ aliases per internal-api-versioning spec
+from app.core.api_versioning import register_v1_internal_aliases, add_version_gone_handler
+register_v1_internal_aliases(app)
+add_version_gone_handler(app)
+
 
 if __name__ == "__main__":
     import uvicorn

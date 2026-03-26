@@ -15,7 +15,7 @@ services:
       - JWKS_URL=http://host.docker.internal:8002/.well-known/jwks.json
       - JWT_AUDIENCE=fastapi-api
       - JWT_ISSUER=https://auth.example.com
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - VLLM_EMBED_URL=http://host.docker.internal:8101
       - ADMIN_SERVICE_URL=http://host.docker.internal:8003
       - STORAGE_BASE_PATH=/tmp/document_processing
       # MinIO/S3 settings
