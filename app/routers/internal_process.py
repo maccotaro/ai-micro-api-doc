@@ -119,6 +119,56 @@ async def internal_process_document(
         )
 
 
+@router.post("/process/minio")
+async def internal_process_from_minio(
+    minio_url: str = Body(..., embed=True, description="MinIO URL (minio://bucket/key)"),
+    document_id: Optional[str] = Body(None, embed=True, description="Document UUID"),
+    user_id: Optional[str] = Body(None, embed=True),
+):
+    """Process a document from MinIO URL (no file upload needed).
+
+    Downloads the file from MinIO, then delegates to celery-doc for processing.
+    Returns task_id immediately for polling via GET /internal/process/status/{task_id}.
+    """
+    try:
+        from app.tasks.celery_app import celery_app
+        from app.services.storage import get_minio_client, parse_minio_path
+
+        bucket, object_key = parse_minio_path(minio_url)
+        filename = object_key.rsplit("/", 1)[-1] if "/" in object_key else object_key
+
+        task_id = str(uuid4())
+        storage_path = Path(settings.STORAGE_BASE_PATH) / "pending" / task_id
+        storage_path.mkdir(parents=True, exist_ok=True)
+
+        file_path = storage_path / filename
+        minio_client = get_minio_client()
+        minio_client.download_file(bucket, object_key, str(file_path))
+
+        logger.info(f"Downloaded {minio_url} to {file_path} for processing")
+
+        result = celery_app.send_task(
+            "app.tasks.document_tasks.process_document_task",
+            args=[str(file_path), filename, None, user_id],
+        )
+
+        return {
+            "task_id": result.id,
+            "status": "processing",
+            "message": "Document processing started from MinIO",
+            "filename": filename,
+            "document_id": document_id,
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error processing from MinIO (internal): {e}")
+        raise HTTPException(
+            status_code=500, detail=f"MinIO processing failed: {str(e)}"
+        )
+
+
 @router.post("/process/async")
 async def internal_process_document_async(
     file: UploadFile = File(...),
